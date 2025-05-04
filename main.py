@@ -21,12 +21,12 @@ app.add_middleware(
 # Servir imagens
 app.mount("/imagens", StaticFiles(directory="static/imagens"), name="imagens")
 
-# === Extrair altura do nome ===
+# === Função para extrair altura do nome ===
 def extrair_altura_do_nome(nome):
-    match = re.search(r"(\d+)\s*m", nome.lower())
+    match = re.search(r"(\d+(?:\.\d+)?)\s*m", nome.lower())
     if match:
-        return int(match.group(1))
-    return 15  # padrão se não encontrar nada
+        return float(match.group(1))
+    return 15.0  # padrão se não encontrar
 
 # === Função para extrair arquivo KML do KMZ ===
 def extrair_kml(kmz_file: UploadFile):
@@ -43,7 +43,7 @@ def extrair_kml(kmz_file: UploadFile):
                 return os.path.join(root, file)
     return None
 
-# === Parser do KML ===
+# === Função de parser direto aqui ===
 def parse_kml(kml_path):
     ns = {"kml": "http://www.opengis.net/kml/2.2"}
     tree = ET.parse(kml_path)
@@ -61,16 +61,16 @@ def parse_kml(kml_path):
         if coords_elem is not None:
             coords = coords_elem.text.strip().split(",")
             lon, lat = float(coords[0]), float(coords[1])
-            alt = extrair_altura_do_nome(nome)
+            alt = float(coords[2]) if len(coords) > 2 else extrair_altura_do_nome(nome)
 
-            if any(palavra in nome.lower() for palavra in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
+            if any(palavra in nome.lower() for palavra in ["antena", "repetidora", "torre", "barrac\u00e3o", "galp\u00e3o", "silo"]):
                 antena = {
                     "nome": nome,
                     "latitude": lat,
                     "longitude": lon,
-                    "altura": alt
+                    "altura": extrair_altura_do_nome(nome)
                 }
-            elif "pivô" in nome.lower():
+            elif "piv\u00f4" in nome.lower():
                 pivos.append({
                     "nome": nome,
                     "latitude": lat,
@@ -89,39 +89,69 @@ async def simular_cloudrf(antena):
 
     body = {
         "version": "CloudRF-API-v3.23",
-        "site": "Repetidora",
-        "network": "PRIVATE",
-        "engine": 1,
+        "site": "Brazil_V6",
+        "network": "My Network",
+        "engine": 2,
+        "coordinates": 1,
         "transmitter": {
             "lat": antena["latitude"],
             "lon": antena["longitude"],
             "alt": antena["altura"],
-            "txw": 20
+            "frq": 915,
+            "txw": 0.3,
+            "bwi": 0.1,
+            "powerUnit": "W"
         },
         "receiver": {
-            "rxh": 1.5
+            "lat": 0,
+            "lon": 0,
+            "alt": 3,
+            "rxg": 3,
+            "rxs": -90
         },
         "feeder": {
-            "loss": 0
+            "flt": 1,
+            "fll": 0,
+            "fcc": 0
         },
         "antenna": {
-            "txg": 2,
-            "bwi": 360,
-            "azm": 0,
-            "tilt": 0
+            "mode": "template",
+            "txg": 3,
+            "txl": 0,
+            "ant": 1,
+            "azi": 0,
+            "tlt": 0,
+            "hbw": 360,
+            "vbw": 90,
+            "fbr": 3,
+            "pol": "v"
         },
         "model": {
-            "pm": 2,
-            "pe": 1
+            "pm": 1,
+            "pe": 2,
+            "ked": 4,
+            "rel": 95,
+            "rcs": 1,
+            "month": 5,
+            "hour": 17,
+            "sunspots_r12": 100
         },
         "environment": {
-            "clm": 1,
-            "humidity": 50
+            "elevation": 1,
+            "landcover": 1,
+            "buildings": 0,
+            "obstacles": 0,
+            "clt": "Minimal.clt"
         },
         "output": {
             "units": "m",
             "col": "IRRICONTRO.dBm",
-            "out": 1
+            "out": 2,
+            "ber": 1,
+            "mod": 7,
+            "nf": -120,
+            "res": 30,
+            "rad": 10
         }
     }
 
@@ -139,13 +169,12 @@ async def simular_cloudrf(antena):
             "bbox": result["latlonbox"]
         }
 
-# === Conversão de lat/lon para pixel ===
+# === Análise de cobertura por cor ===
 def latlon_para_pixel(lat, lon, bbox, largura, altura):
     x = int((lon - bbox["west"]) / (bbox["east"] - bbox["west"]) * largura)
     y = int((bbox["north"] - lat) / (bbox["north"] - bbox["south"]) * altura)
     return x, y
 
-# === Verificar cobertura ===
 def verificar_cobertura(pivos, bbox):
     imagem = Image.open("static/imagens/sinal.png").convert("RGB")
     largura, altura = imagem.size
@@ -162,7 +191,7 @@ def verificar_cobertura(pivos, bbox):
             fora.append(pivo)
     return fora
 
-# === Endpoint principal ===
+# === Rota principal ===
 @app.post("/processar_kmz")
 async def processar_kmz(kmz: UploadFile = File(...)):
     try:
@@ -170,7 +199,7 @@ async def processar_kmz(kmz: UploadFile = File(...)):
         antena, pivos = parse_kml(kml_path)
 
         if not antena:
-            return JSONResponse(content={"erro": "Antena não encontrada"}, status_code=400)
+            return JSONResponse(content={"erro": "Antena n\u00e3o encontrada"}, status_code=400)
 
         resultado = await simular_cloudrf(antena)
         bbox = resultado["bbox"]
