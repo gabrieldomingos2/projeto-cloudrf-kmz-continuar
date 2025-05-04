@@ -56,14 +56,18 @@ def parse_kml(kml_path):
             lon, lat = float(coords[0]), float(coords[1])
 
             if any(p in nome.lower() for p in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
-                match = re.search(r"(\d+)\s?m", nome.lower())
-                altura = float(match.group(1)) if match else 10.0
+                match = re.search(r"(\d+(?:[.,]\d+)?)\s*m", nome.lower())
+                if match:
+                    altura = float(match.group(1).replace(",", "."))
+                else:
+                    altura = 15.0  # fallback padrão se não achar a altura
                 antena = {
                     "nome": nome,
                     "latitude": lat,
                     "longitude": lon,
                     "altura": altura
                 }
+
             elif "pivô" in nome.lower():
                 pivos.append({
                     "nome": nome,
