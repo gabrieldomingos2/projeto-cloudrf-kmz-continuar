@@ -1,10 +1,26 @@
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.db
-*.sqlite3
-*.log
+# Ignora ambientes virtuais
 venv/
 .env
+
+# Ignora caches do Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Ignora arquivos do VS Code e PyCharm
+.vscode/
+.idea/
+
+# Ignora arquivos temporários
+*.log
+*.tmp
 .DS_Store
+
+# Ignora imagens e KMZs gerados
+static/imagens/*.png
+static/imagens/*.kmz
+static/imagens/*.key.png
+
+# Ignora KMLs extraídos automaticamente
+arquivos/kmzextraido/

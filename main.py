@@ -2,7 +2,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
-import os, zipfile, base64, httpx
+import os, zipfile, base64, httpx, re
 from PIL import Image
 from io import BytesIO
 import numpy as np
@@ -21,6 +21,13 @@ app.add_middleware(
 # Servir imagens
 app.mount("/imagens", StaticFiles(directory="static/imagens"), name="imagens")
 
+# === Extrair altura do nome ===
+def extrair_altura_do_nome(nome):
+    match = re.search(r"(\d+)\s*m", nome.lower())
+    if match:
+        return int(match.group(1))
+    return 15  # padrão se não encontrar nada
+
 # === Função para extrair arquivo KML do KMZ ===
 def extrair_kml(kmz_file: UploadFile):
     caminho_kmz = f"arquivos/{kmz_file.filename}"
@@ -36,7 +43,7 @@ def extrair_kml(kmz_file: UploadFile):
                 return os.path.join(root, file)
     return None
 
-# === Função de parser direto aqui ===
+# === Parser do KML ===
 def parse_kml(kml_path):
     ns = {"kml": "http://www.opengis.net/kml/2.2"}
     tree = ET.parse(kml_path)
@@ -54,9 +61,9 @@ def parse_kml(kml_path):
         if coords_elem is not None:
             coords = coords_elem.text.strip().split(",")
             lon, lat = float(coords[0]), float(coords[1])
-            alt = float(coords[2]) if len(coords) > 2 else 10.0
+            alt = extrair_altura_do_nome(nome)
 
-            if any(palavra.lower() in nome.lower() for palavra in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
+            if any(palavra in nome.lower() for palavra in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
                 antena = {
                     "nome": nome,
                     "latitude": lat,
@@ -132,12 +139,13 @@ async def simular_cloudrf(antena):
             "bbox": result["latlonbox"]
         }
 
-# === Análise de cobertura por cor ===
+# === Conversão de lat/lon para pixel ===
 def latlon_para_pixel(lat, lon, bbox, largura, altura):
     x = int((lon - bbox["west"]) / (bbox["east"] - bbox["west"]) * largura)
     y = int((bbox["north"] - lat) / (bbox["north"] - bbox["south"]) * altura)
     return x, y
 
+# === Verificar cobertura ===
 def verificar_cobertura(pivos, bbox):
     imagem = Image.open("static/imagens/sinal.png").convert("RGB")
     largura, altura = imagem.size
@@ -148,13 +156,13 @@ def verificar_cobertura(pivos, bbox):
         x, y = latlon_para_pixel(pivo["latitude"], pivo["longitude"], bbox, largura, altura)
         if 0 <= x < largura and 0 <= y < altura:
             cor = img_array[y, x]
-            if cor[0] > 200 and cor[1] > 200:  # cinza/branco = fraco
+            if cor[0] > 200 and cor[1] > 200:
                 fora.append(pivo)
         else:
             fora.append(pivo)
     return fora
 
-# === Rota principal ===
+# === Endpoint principal ===
 @app.post("/processar_kmz")
 async def processar_kmz(kmz: UploadFile = File(...)):
     try:
