@@ -201,19 +201,28 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         lat_n, lon_e, lat_s, lon_w = limites["north"], limites["east"], limites["south"], limites["west"]
         px = int((lon - lon_w) / (lon_e - lon_w) * largura)
         py = int((lat_n - lat) / (lat_n - lat_s) * altura)
-        return px, py
+        return max(0, min(px, largura - 1)), max(0, min(py, altura - 1))
 
     def eh_verde(r, g, b):
-        return 60 <= r <= 120 and 160 <= g <= 220 and 60 <= b <= 120
+        return 60 <= r <= 110 and 150 <= g <= 255 and 60 <= b <= 110
+
+    def cobertura_na_area(x, y, imagem, tamanho=3):
+        total = 0
+        verdes = 0
+        for dx in range(-tamanho, tamanho + 1):
+            for dy in range(-tamanho, tamanho + 1):
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < largura and 0 <= ny < altura:
+                    r, g, b = imagem.getpixel((nx, ny))
+                    total += 1
+                    if eh_verde(r, g, b):
+                        verdes += 1
+        return verdes / total >= 0.5
 
     pivos_fora = []
     for piv in pivos:
         x, y = coordenada_para_pixel(piv["lat"], piv["lon"])
-        if 0 <= x < largura and 0 <= y < altura:
-            r, g, b = imagem.getpixel((x, y))
-            if not eh_verde(r, g, b):
-                pivos_fora.append(piv)
-        else:
+        if not cobertura_na_area(x, y, imagem):
             pivos_fora.append(piv)
 
     url_base = str(request.base_url).rstrip("/")
