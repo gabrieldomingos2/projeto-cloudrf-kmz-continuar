@@ -34,7 +34,7 @@ def extrair_latlonbox(kml_path):
     }
 
 def extrair_altura_do_nome(nome):
-    match = re.search(r"(\d+)\s*m", nome.lower())
+    match = re.search(r"(\d{1,3})\s*[mM]", nome)
     if match:
         altura = int(match.group(1))
         if 5 <= altura <= 50:
@@ -81,6 +81,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
 
             if any(x in nome_texto for x in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
                 altura = extrair_altura_do_nome(nome.text)
+                print(f"🔍 Nome da antena: '{nome.text}' => Altura detectada: {altura}m")
                 antena = {"nome": nome.text, "lat": lat, "lon": lon, "altura": altura}
             elif "pivô" in nome_texto:
                 pivos.append({"nome": nome.text, "lat": lat, "lon": lon})
