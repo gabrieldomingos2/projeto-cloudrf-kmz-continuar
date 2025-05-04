@@ -106,18 +106,8 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
             "bwi": 0.1,
             "powerUnit": "W"
         },
-        "receiver": {
-            "lat": 0,
-            "lon": 0,
-            "alt": 3,
-            "rxg": 3,
-            "rxs": -90
-        },
-        "feeder": {
-            "flt": 1,
-            "fll": 0,
-            "fcc": 0
-        },
+        "receiver": {"lat": 0, "lon": 0, "alt": 3, "rxg": 3, "rxs": -90},
+        "feeder": {"flt": 1, "fll": 0, "fcc": 0},
         "antenna": {
             "mode": "template",
             "txg": 3,
@@ -130,33 +120,9 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
             "fbr": 3,
             "pol": "v"
         },
-        "model": {
-            "pm": 1,
-            "pe": 2,
-            "ked": 4,
-            "rel": 95,
-            "rcs": 1,
-            "month": 5,
-            "hour": 17,
-            "sunspots_r12": 100
-        },
-        "environment": {
-            "elevation": 1,
-            "landcover": 1,
-            "buildings": 0,
-            "obstacles": 0,
-            "clt": "Minimal.clt"
-        },
-        "output": {
-            "units": "m",
-            "col": "IRRICONTRO.dBm",
-            "out": 2,
-            "ber": 1,
-            "mod": 7,
-            "nf": -120,
-            "res": 30,
-            "rad": 10
-        }
+        "model": {"pm": 1, "pe": 2, "ked": 4, "rel": 95, "rcs": 1, "month": 5, "hour": 17, "sunspots_r12": 100},
+        "environment": {"elevation": 1, "landcover": 1, "buildings": 0, "obstacles": 0, "clt": "Minimal.clt"},
+        "output": {"units": "m", "col": "IRRICONTRO.dBm", "out": 2, "ber": 1, "mod": 7, "nf": -120, "res": 30, "rad": 10}
     }
 
     headers = {
@@ -201,28 +167,23 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         lat_n, lon_e, lat_s, lon_w = limites["north"], limites["east"], limites["south"], limites["west"]
         px = int((lon - lon_w) / (lon_e - lon_w) * largura)
         py = int((lat_n - lat) / (lat_n - lat_s) * altura)
-        return max(0, min(px, largura - 1)), max(0, min(py, altura - 1))
+        return px, py
 
-    def eh_verde(r, g, b):
-        return 60 <= r <= 110 and 150 <= g <= 255 and 60 <= b <= 110
-
-    def cobertura_na_area(x, y, imagem, tamanho=3):
-        total = 0
-        verdes = 0
-        for dx in range(-tamanho, tamanho + 1):
-            for dy in range(-tamanho, tamanho + 1):
-                nx, ny = x + dx, y + dy
+    def esta_fora(px, py):
+        entorno = 3
+        for dx in range(-entorno, entorno + 1):
+            for dy in range(-entorno, entorno + 1):
+                nx, ny = px + dx, py + dy
                 if 0 <= nx < largura and 0 <= ny < altura:
                     r, g, b = imagem.getpixel((nx, ny))
-                    total += 1
-                    if eh_verde(r, g, b):
-                        verdes += 1
-        return verdes / total >= 0.5
+                    if g > r and g > b and g > 100:  # Verde predominante
+                        return False
+        return True
 
     pivos_fora = []
     for piv in pivos:
         x, y = coordenada_para_pixel(piv["lat"], piv["lon"])
-        if not cobertura_na_area(x, y, imagem):
+        if esta_fora(x, y):
             pivos_fora.append(piv)
 
     url_base = str(request.base_url).rstrip("/")
