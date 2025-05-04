@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 import os, zipfile, xml.etree.ElementTree as ET, httpx
 from PIL import Image
 import numpy as np
+import re
 
 app = FastAPI()
 
@@ -31,6 +32,14 @@ def extrair_latlonbox(kml_path):
         "east": float(box.find("kml:east", ns).text),
         "west": float(box.find("kml:west", ns).text),
     }
+
+def extrair_altura_do_nome(nome):
+    match = re.search(r"(\d+)\s*m", nome.lower())
+    if match:
+        altura = int(match.group(1))
+        if 5 <= altura <= 50:
+            return altura
+    return 15
 
 @app.post("/processar")
 async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
@@ -71,7 +80,8 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
             lon, lat = float(coords[0]), float(coords[1])
 
             if any(x in nome_texto for x in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
-                antena = {"nome": nome.text, "lat": lat, "lon": lon, "altura": 15}
+                altura = extrair_altura_do_nome(nome.text)
+                antena = {"nome": nome.text, "lat": lat, "lon": lon, "altura": altura}
             elif "pivô" in nome_texto:
                 pivos.append({"nome": nome.text, "lat": lat, "lon": lon})
 
@@ -180,7 +190,6 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
                         return False
         return True
 
-    # Colore o centro do pivô na imagem com azul (para debug)
     for piv in pivos:
         x, y = coordenada_para_pixel(piv["lat"], piv["lon"])
         if 0 <= x < largura and 0 <= y < altura:
