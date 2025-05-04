@@ -19,6 +19,7 @@ app.add_middleware(
 
 app.mount("/imagens", StaticFiles(directory="static/imagens"), name="imagens")
 
+
 def extrair_latlonbox(kml_path):
     tree = ET.parse(kml_path)
     root = tree.getroot()
@@ -36,16 +37,15 @@ def extrair_latlonbox(kml_path):
             }
     return None
 
+
 def extrair_altura_do_nome(nome):
     match = re.search(r"(\d{1,3})\s*[mM]", nome)
     if match:
         altura = int(match.group(1))
         if 5 <= altura <= 50:
             return altura
-    return 15
+    return 15  # padrão
 
-def strip_namespace(tag):
-    return tag.split("}")[-1]
 
 @app.post("/processar")
 async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
@@ -56,14 +56,14 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
     with open(kmz_path, "wb") as f:
         f.write(await kmz.read())
 
-    with zipfile.ZipFile(kmz_path, 'r') as zip_ref:
+    with zipfile.ZipFile(kmz_path, "r") as zip_ref:
         zip_ref.extractall("arquivos/kmzextraido")
 
     kml_path = None
-    for root_dir, dirs, files in os.walk("arquivos/kmzextraido"):
+    for root, dirs, files in os.walk("arquivos/kmzextraido"):
         for file in files:
             if file.endswith(".kml"):
-                kml_path = os.path.join(root_dir, file)
+                kml_path = os.path.join(root, file)
                 break
 
     if not kml_path:
@@ -72,36 +72,39 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
     tree = ET.parse(kml_path)
     root = tree.getroot()
 
+    ns = {"kml": "http://www.opengis.net/kml/2.2"}
+
     antena = None
     pivos = []
     circulos = []
 
-    for placemark in root.iter():
-        if strip_namespace(placemark.tag) != "Placemark":
-            continue
-
-        nome = None
-        ponto = None
-
-        for child in placemark:
-            if strip_namespace(child.tag) == "name":
-                nome = child.text.strip()
-            elif strip_namespace(child.tag) == "Point":
-                for coord in child.iter():
-                    if strip_namespace(coord.tag) == "coordinates":
-                        ponto = coord.text.strip()
-
-        if nome and ponto:
-            nome_texto = nome.lower()
-            coords = ponto.split(",")
+    for placemark in root.findall(".//kml:Placemark", ns):
+        nome = placemark.find("kml:name", ns)
+        ponto = placemark.find(".//kml:Point/kml:coordinates", ns)
+        if nome is not None and ponto is not None:
+            nome_texto = nome.text.lower()
+            coords = ponto.text.strip().split(",")
             lon, lat = float(coords[0]), float(coords[1])
-            altura = extrair_altura_do_nome(nome)
+            altura = extrair_altura_do_nome(nome.text)
 
             if any(x in nome_texto for x in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
-                print(f"📍 Detectado ponto: '{nome}' → altura extraída: {altura}m")
-                antena = {"nome": nome, "lat": lat, "lon": lon, "altura": altura}
+                print(f"📍 Detectado ponto: '{nome.text}' → altura extraída: {altura}m")
+                antena = {"nome": nome.text, "lat": lat, "lon": lon, "altura": altura}
             elif "pivô" in nome_texto:
-                pivos.append({"nome": nome, "lat": lat, "lon": lon})
+                pivos.append({"nome": nome.text, "lat": lat, "lon": lon})
+
+        linha = placemark.find(".//kml:LineString/kml:coordinates", ns)
+        if linha is not None and nome is not None and "medida do círculo" in nome.text.lower():
+            coordenadas = []
+            for coord in linha.text.strip().split():
+                partes = coord.split(",")
+                if len(partes) >= 2:
+                    try:
+                        lon, lat = float(partes[0]), float(partes[1])
+                        coordenadas.append([lat, lon])
+                    except:
+                        continue
+            circulos.append({"nome": nome.text, "coordenadas": coordenadas})
 
     if not antena:
         return JSONResponse(status_code=400, content={"erro": "Antena principal não encontrada"})
@@ -119,7 +122,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
             "frq": 915,
             "txw": 0.3,
             "bwi": 0.1,
-            "powerUnit": "W"
+            "powerUnit": "W",
         },
         "receiver": {"lat": 0, "lon": 0, "alt": 3, "rxg": 3, "rxs": -90},
         "feeder": {"flt": 1, "fll": 0, "fcc": 0},
@@ -133,23 +136,50 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
             "hbw": 360,
             "vbw": 90,
             "fbr": 3,
-            "pol": "v"
+            "pol": "v",
         },
-        "model": {"pm": 1, "pe": 2, "ked": 4, "rel": 95, "rcs": 1, "month": 5, "hour": 17, "sunspots_r12": 100},
-        "environment": {"elevation": 1, "landcover": 1, "buildings": 0, "obstacles": 0, "clt": "Minimal.clt"},
-        "output": {"units": "m", "col": "IRRICONTRO.dBm", "out": 2, "ber": 1, "mod": 7, "nf": -120, "res": 30, "rad": 10}
+        "model": {
+            "pm": 1,
+            "pe": 2,
+            "ked": 4,
+            "rel": 95,
+            "rcs": 1,
+            "month": 5,
+            "hour": 17,
+            "sunspots_r12": 100,
+        },
+        "environment": {
+            "elevation": 1,
+            "landcover": 1,
+            "buildings": 0,
+            "obstacles": 0,
+            "clt": "Minimal.clt",
+        },
+        "output": {
+            "units": "m",
+            "col": "IRRICONTRO.dBm",
+            "out": 2,
+            "ber": 1,
+            "mod": 7,
+            "nf": -120,
+            "res": 30,
+            "rad": 10,
+        },
     }
 
     headers = {
         "Content-Type": "application/json",
-        "key": "35113-e181126d4af70994359d767890b3a4f2604eb0ef"
+        "key": "35113-e181126d4af70994359d767890b3a4f2604eb0ef",
     }
 
     async with httpx.AsyncClient() as client:
         response = await client.post("https://api.cloudrf.com/area", headers=headers, json=payload)
 
         if response.status_code != 200:
-            return JSONResponse(status_code=500, content={"erro": "Erro na API CloudRF", "detalhe": response.text})
+            return JSONResponse(
+                status_code=500,
+                content={"erro": "Erro na API CloudRF", "detalhe": response.text},
+            )
 
         dados = response.json()
         imagem_url = dados["PNG_WGS84"]
@@ -215,5 +245,5 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         "antena": antena,
         "pivos": pivos,
         "fora_cobertura": pivos_fora,
-        "circulos": circulos
+        "circulos": circulos,
     }
