@@ -167,7 +167,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         lat_n, lon_e, lat_s, lon_w = limites["north"], limites["east"], limites["south"], limites["west"]
         px = int((lon - lon_w) / (lon_e - lon_w) * largura)
         py = int((lat_n - lat) / (lat_n - lat_s) * altura)
-        return px, py
+        return max(0, min(px, largura - 1)), max(0, min(py, altura - 1))
 
     def esta_fora(px, py):
         entorno = 3
@@ -176,9 +176,17 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
                 nx, ny = px + dx, py + dy
                 if 0 <= nx < largura and 0 <= ny < altura:
                     r, g, b = imagem.getpixel((nx, ny))
-                    if g > r and g > b and g > 100:  # Verde predominante
+                    if g > r and g > b and g > 100:
                         return False
         return True
+
+    # Colore o centro do pivô na imagem com azul (para debug)
+    for piv in pivos:
+        x, y = coordenada_para_pixel(piv["lat"], piv["lon"])
+        if 0 <= x < largura and 0 <= y < altura:
+            imagem.putpixel((x, y), (0, 0, 255))
+
+    imagem.save("static/imagens/sinal.png")
 
     pivos_fora = []
     for piv in pivos:
