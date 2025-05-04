@@ -83,21 +83,22 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         nome = None
         ponto = None
 
-        for elem in placemark.iter():
-            tag = strip_namespace(elem.tag)
-            if tag == "name":
-                nome = elem.text.strip()
-            elif tag == "coordinates" and strip_namespace(elem.getparent().tag) == "Point":
-                ponto = elem.text.strip()
+        for child in placemark:
+            if strip_namespace(child.tag) == "name":
+                nome = child.text.strip()
+            elif strip_namespace(child.tag) == "Point":
+                for coord in child.iter():
+                    if strip_namespace(coord.tag) == "coordinates":
+                        ponto = coord.text.strip()
 
         if nome and ponto:
             nome_texto = nome.lower()
             coords = ponto.split(",")
             lon, lat = float(coords[0]), float(coords[1])
+            altura = extrair_altura_do_nome(nome)
 
             if any(x in nome_texto for x in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
-                altura = extrair_altura_do_nome(nome)
-                print(f"🔍 Nome da antena: '{nome}' => Altura detectada: {altura}m")
+                print(f"📍 Detectado ponto: '{nome}' → altura extraída: {altura}m")
                 antena = {"nome": nome, "lat": lat, "lon": lon, "altura": altura}
             elif "pivô" in nome_texto:
                 pivos.append({"nome": nome, "lat": lat, "lon": lon})
