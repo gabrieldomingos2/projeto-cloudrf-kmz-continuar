@@ -203,26 +203,15 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         py = int((lat_n - lat) / (lat_n - lat_s) * altura)
         return px, py
 
-    def rgb_para_dbm(r, g, b):
-        if r > 230 and g > 230 and b > 230:
-            return -120  # Branco
-        if r < 80 and g > 160 and b < 80:
-            return -60  # Verde forte
-        if r < 150 and g > 200 and b < 150:
-            return -75  # Verde médio
-        if r > 200 and g > 200 and b < 100:
-            return -85  # Amarelo claro
-        if r > 200 and g < 100 and b < 100:
-            return -100  # Vermelho claro
-        return -95  # Default
+    def eh_verde(r, g, b):
+        return 60 <= r <= 120 and 160 <= g <= 220 and 60 <= b <= 120
 
     pivos_fora = []
     for piv in pivos:
         x, y = coordenada_para_pixel(piv["lat"], piv["lon"])
         if 0 <= x < largura and 0 <= y < altura:
             r, g, b = imagem.getpixel((x, y))
-            dbm = rgb_para_dbm(r, g, b)
-            if dbm < -90:
+            if not eh_verde(r, g, b):
                 pivos_fora.append(piv)
         else:
             pivos_fora.append(piv)
