@@ -4,11 +4,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 import os, zipfile, base64, httpx, re
 from PIL import Image
+from io import BytesIO
 import numpy as np
 import xml.etree.ElementTree as ET
 
 app = FastAPI()
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,15 +18,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Servir imagens
 app.mount("/imagens", StaticFiles(directory="static/imagens"), name="imagens")
 
-# === KMZ → KML ===
+# === Extrair KML do KMZ ===
 def extrair_kml(kmz_file: UploadFile):
     caminho_kmz = f"arquivos/{kmz_file.filename}"
     with open(caminho_kmz, "wb") as f:
         f.write(kmz_file.file.read())
+
     with zipfile.ZipFile(caminho_kmz, "r") as zip_ref:
         zip_ref.extractall("arquivos/kmzextraido")
+
     for root, _, files in os.walk("arquivos/kmzextraido"):
         for file in files:
             if file.endswith(".kml"):
@@ -44,13 +49,17 @@ def parse_kml(kml_path):
     for placemark in placemarks:
         nome_elem = placemark.find("kml:name", ns)
         nome = nome_elem.text if nome_elem is not None else ""
+
         coords_elem = placemark.find(".//kml:Point/kml:coordinates", ns)
         if coords_elem is not None:
             coords = coords_elem.text.strip().split(",")
             lon, lat = float(coords[0]), float(coords[1])
+
             if any(p in nome.lower() for p in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
                 match = re.search(r"(\d+)\s?m", nome.lower())
-                altura = float(match.group(1)) if match else 10.0
+                if not match:
+                    raise ValueError(f"Altura não encontrada no nome da antena: '{nome}'")
+                altura = float(match.group(1))
                 antena = {
                     "nome": nome,
                     "latitude": lat,
@@ -63,15 +72,17 @@ def parse_kml(kml_path):
                     "latitude": lat,
                     "longitude": lon
                 })
+
     return antena, pivos
 
-# === Simulação CloudRF ===
+# === Simular cobertura na CloudRF ===
 async def simular_cloudrf(antena):
     url = "https://api.cloudrf.com/area"
     headers = {
         "key": "35113-e181126d4af70994359d767890b3a4f2604eb0ef",
         "Content-Type": "application/json"
     }
+
     body = {
         "version": "CloudRF-API-v3.23",
         "site": "Brazil_V6",
@@ -139,27 +150,33 @@ async def simular_cloudrf(antena):
             "rad": 10
         }
     }
+
     async with httpx.AsyncClient() as client:
         resp = await client.post(url, headers=headers, json=body)
         if resp.status_code != 200:
             raise Exception("Erro na API CloudRF", resp.text)
         result = resp.json()
-        img_data = base64.b64decode(result["image"])
+        imagem_base64 = result["image"]
+        img_data = base64.b64decode(imagem_base64)
         with open("static/imagens/sinal.png", "wb") as f:
             f.write(img_data)
-        return {"bbox": result["latlonbox"]}
 
-# === Pixelização ===
+        return {
+            "bbox": result["latlonbox"]
+        }
+
+# === Conversão coordenadas para pixel ===
 def latlon_para_pixel(lat, lon, bbox, largura, altura):
     x = int((lon - bbox["west"]) / (bbox["east"] - bbox["west"]) * largura)
     y = int((bbox["north"] - lat) / (bbox["north"] - bbox["south"]) * altura)
     return x, y
 
-# === Análise cobertura ===
+# === Verificar cobertura ===
 def verificar_cobertura(pivos, bbox):
     imagem = Image.open("static/imagens/sinal.png").convert("RGB")
     largura, altura = imagem.size
     img_array = np.array(imagem)
+
     fora = []
     for pivo in pivos:
         x, y = latlon_para_pixel(pivo["latitude"], pivo["longitude"], bbox, largura, altura)
@@ -171,29 +188,29 @@ def verificar_cobertura(pivos, bbox):
             fora.append(pivo)
     return fora
 
-# === Etapa 1 ===
-@app.post("/processar_kmz")
+# === Rota principal ===
+@app.post("/processar")
 async def processar_kmz(kmz: UploadFile = File(...)):
     try:
         kml_path = extrair_kml(kmz)
         antena, pivos = parse_kml(kml_path)
+
         if not antena:
             return JSONResponse(content={"erro": "Antena não encontrada"}, status_code=400)
-        return {"antena": antena, "pivos": pivos}
-    except Exception as e:
-        return JSONResponse(content={"erro": "Falha no processamento", "detalhe": str(e)}, status_code=500)
 
-# === Etapa 2 ===
-@app.post("/simular_cloudrf")
-async def simular(antena: dict, pivos: list):
-    try:
         resultado = await simular_cloudrf(antena)
         bbox = resultado["bbox"]
         pivos_fora = verificar_cobertura(pivos, bbox)
+
         return {
+            "antena": antena,
+            "pivos": pivos,
+            "fora_cobertura": pivos_fora,
             "imagem": "/imagens/sinal.png",
-            "limites": bbox,
-            "fora_da_cobertura": pivos_fora
+            "limites": bbox
         }
+
+    except ValueError as ve:
+        return JSONResponse(content={"erro": str(ve)}, status_code=400)
     except Exception as e:
-        return JSONResponse(content={"erro": "Falha na simulação", "detalhe": str(e)}, status_code=500)
+        return JSONResponse(content={"erro": "Falha ao processar", "detalhe": str(e)}, status_code=500)
