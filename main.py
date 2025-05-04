@@ -20,18 +20,21 @@ app.add_middleware(
 app.mount("/imagens", StaticFiles(directory="static/imagens"), name="imagens")
 
 def extrair_latlonbox(kml_path):
-    ns = {"kml": "http://earth.google.com/kml/2.2"}
     tree = ET.parse(kml_path)
     root = tree.getroot()
-    box = root.find(".//kml:LatLonBox", ns)
-    if box is None:
-        return None
-    return {
-        "north": float(box.find("kml:north", ns).text),
-        "south": float(box.find("kml:south", ns).text),
-        "east": float(box.find("kml:east", ns).text),
-        "west": float(box.find("kml:west", ns).text),
-    }
+    for box in root.iter():
+        if box.tag.endswith("LatLonBox"):
+            limites = {}
+            for el in box:
+                tag = el.tag.split("}")[-1]
+                limites[tag] = float(el.text)
+            return {
+                "north": limites.get("north"),
+                "south": limites.get("south"),
+                "east": limites.get("east"),
+                "west": limites.get("west"),
+            }
+    return None
 
 def extrair_altura_do_nome(nome):
     match = re.search(r"(\d{1,3})\s*[mM]", nome)
@@ -40,6 +43,9 @@ def extrair_altura_do_nome(nome):
         if 5 <= altura <= 50:
             return altura
     return 15
+
+def strip_namespace(tag):
+    return tag.split("}")[-1]
 
 @app.post("/processar")
 async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
@@ -54,16 +60,15 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         zip_ref.extractall("arquivos/kmzextraido")
 
     kml_path = None
-    for root, dirs, files in os.walk("arquivos/kmzextraido"):
+    for root_dir, dirs, files in os.walk("arquivos/kmzextraido"):
         for file in files:
             if file.endswith(".kml"):
-                kml_path = os.path.join(root, file)
+                kml_path = os.path.join(root_dir, file)
                 break
 
     if not kml_path:
         return JSONResponse(status_code=400, content={"erro": "KML não encontrado"})
 
-    ns = {"kml": "http://www.opengis.net/kml/2.2"}
     tree = ET.parse(kml_path)
     root = tree.getroot()
 
@@ -71,33 +76,31 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
     pivos = []
     circulos = []
 
-    for placemark in root.findall(".//kml:Placemark", ns):
-        nome = placemark.find("kml:name", ns)
-        ponto = placemark.find(".//kml:Point/kml:coordinates", ns)
-        if nome is not None and ponto is not None:
-            nome_texto = nome.text.lower()
-            coords = ponto.text.strip().split(",")
+    for placemark in root.iter():
+        if strip_namespace(placemark.tag) != "Placemark":
+            continue
+
+        nome = None
+        ponto = None
+
+        for elem in placemark.iter():
+            tag = strip_namespace(elem.tag)
+            if tag == "name":
+                nome = elem.text.strip()
+            elif tag == "coordinates" and strip_namespace(elem.getparent().tag) == "Point":
+                ponto = elem.text.strip()
+
+        if nome and ponto:
+            nome_texto = nome.lower()
+            coords = ponto.split(",")
             lon, lat = float(coords[0]), float(coords[1])
 
             if any(x in nome_texto for x in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
-                altura = extrair_altura_do_nome(nome.text)
-                print(f"🔍 Nome da antena: '{nome.text}' => Altura detectada: {altura}m")
-                antena = {"nome": nome.text, "lat": lat, "lon": lon, "altura": altura}
+                altura = extrair_altura_do_nome(nome)
+                print(f"🔍 Nome da antena: '{nome}' => Altura detectada: {altura}m")
+                antena = {"nome": nome, "lat": lat, "lon": lon, "altura": altura}
             elif "pivô" in nome_texto:
-                pivos.append({"nome": nome.text, "lat": lat, "lon": lon})
-
-        linha = placemark.find(".//kml:LineString/kml:coordinates", ns)
-        if linha is not None and nome is not None and "medida do círculo" in nome.text.lower():
-            coordenadas = []
-            for coord in linha.text.strip().split():
-                partes = coord.split(",")
-                if len(partes) >= 2:
-                    try:
-                        lon, lat = float(partes[0]), float(partes[1])
-                        coordenadas.append([lat, lon])
-                    except:
-                        continue
-            circulos.append({"nome": nome.text, "coordenadas": coordenadas})
+                pivos.append({"nome": nome, "lat": lat, "lon": lon})
 
     if not antena:
         return JSONResponse(status_code=400, content={"erro": "Antena principal não encontrada"})
