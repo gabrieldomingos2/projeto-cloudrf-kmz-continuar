@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://earth.google.com/kml/2.2">
+<!-- KML from CloudRF.com -->
+<Document>
+<Folder>
+<name>0504134251_My_Network_Torre_-_10m</name>
+<GroundOverlay><name>915MHz 0.3W</name><Icon><href>0504134251_My_Network_Torre_-_10m.4326.png</href></Icon><LatLonBox><north>-19.3463</north><south>-19.5368</south><east>-44.3955</east><west>-44.586</west><rotation>0.0</rotation></LatLonBox></GroundOverlay><ScreenOverlay>
+	<name>Colour Key - dBm</name>
+	<Icon><href>IRRICONTRO.dBm.key.png</href></Icon><overlayXY x="0" y="1" xunits="fraction" yunits="fraction"/>
+	<screenXY x="0" y="1" xunits="fraction" yunits="fraction"/>
+	<rotationXY x="0" y="0" xunits="fraction" yunits="fraction"/>
+</ScreenOverlay>
+<Placemark>
+	<name>0504134251_My_Network_Torre_-_10m</name>
+	<description><![CDATA[<table border="1"><tr><td>Frequency</td><td>915 MHz</td></tr><tr><td>RF Power</td><td>0.3 W</td></tr><tr><td>Tx Gain</td><td>3 dBi</td></tr><tr><td>ERP</td><td>0.365 W / 25.623 dBm</td></tr><tr><td>EIRP</td><td>0.613 W / 27.876 dBm</td></tr><tr><td>Tx Lat / Lon</td><td>-19.441534, -44.490772</td></tr><tr><td>Tx Height</td><td>15m</td></tr><tr><td>Tx Antenna</td><td>Pattern: DIPOLE.ANT<br>Azimuth: 0&deg;</br>Tilt: 0&deg;<br>Polarisation: v<br>Gain: 3 dBi</td></tr><tr><td>Rx Height</td><td>3m</td></tr><tr><td>Rx Sensitivity</td><td>-90dBm</td></tr><tr><td>Rx Gain</td><td>3 dBi</td></tr><tr><td>Modulation</td><td>CW</td></tr><tr><td>Bandwidth</td><td>0.1 MHz</td></tr><tr><td>RF Model</td><td>1-2-4</td></tr><tr><td>Resolution</td><td>30m</td></tr><tr><td>Radius</td><td>10Km</td></tr><tr><td>Area</td><td>38.724</td></tr><tr><td>Coverage</td><td>12</td></tr><tr><td>File ID</td><td>0504134251_My_Network_Torre_-_10m</td></tr><tr><td>Colour Key</td><td><img width='40px' src='IRRICONTRO.dBm.key.png'/></td></tr><tr><td>Raw Request</td><td><textarea rows="5">{
+    "ant": "1",
+    "antenna_pattern": {
+        "azimuth": "",
+        "elevation": ""
+    },
+    "azi": "0",
+    "b3d": "0",
+    "ber": 0,
+    "blu": 0,
+    "bwi": "0.1",
+    "calculation_type": null,
+    "cli": 6,
+    "cll": 0,
+    "clm": 0,
+    "clt": "Minimal.clt",
+    "col": "IRRICONTRO.dBm",
+    "dem": "1",
+    "dis": "m",
+    "disAtSeaLevel": false,
+    "engine": 2,
+    "erp": 0.365,
+    "erpPlusRxg": 0.728,
+    "fbr": 3,
+    "file": "kmz",
+    "filename": "\/var\/www\/users\/35113\/0504134251_My_Network_Torre_-_10m",
+    "frq": "915",
+    "geo": 1,
+    "grn": 0,
+    "hbw": 1,
+    "ip": "187.49.201.73",
+    "ked": "4",
+    "lat": "-19.441534852136",
+    "lco": "1",
+    "lon": "-44.490770802004",
+    "mat": 0.25,
+    "multisite": 0,
+    "mod": 0,
+    "nam": "Torre_-_10m",
+    "net": "My_Network",
+    "nf": "-120",
+    "os": null,
+    "out": "2",
+    "pe": "2",
+    "pm": "1",
+    "points": [],
+    "pol": "v",
+    "ppa": 0,
+    "rad": "10",
+    "radarCrossSection": 1,
+    "red": 0,
+    "rel": "95",
+    "res": "30",
+    "rla": 0,
+    "rlo": 0,
+    "rxg": 3,
+    "rxh": "3",
+    "rxs": "-90",
+    "sfn": "0504134251_My_Network_Torre_-_10m",
+    "ter": 4,
+    "threads": "8",
+    "tlt": "0",
+    "txg": "3",
+    "txh": "15",
+    "txl": 0,
+    "txw": "0.3",
+    "ua": null,
+    "ui": 2,
+    "uid": "35113",
+    "vbw": 1,
+    "buildings": "0",
+    "elevation": "1",
+    "landcover": "1",
+    "obstacles": "0",
+    "bounds": [
+        0,
+        -19.3463,
+        -44.3955,
+        -19.5368,
+        -44.586
+    ],
+    "elapsed": 889
+}</textarea></td></tr></table>]]></description>
+	<LookAt>
+      <longitude>-44.490772</longitude>
+      <latitude>-19.441534</latitude>
+      <altitude>15</altitude>
+      <range>10000</range>
+      <tilt>0</tilt>
+      <heading>0</heading>
+      <altitudeMode>relativeToGround</altitudeMode>
+    </LookAt>
+	<visibility>1</visibility>
+	<Style><IconStyle><scale>1.0</scale><Icon>
+	<href>cloudrf.png</href>
+	</Icon></IconStyle>
+	<LabelStyle><scale>0.9</scale></LabelStyle>
+	</Style>
+	<Point>
+	<extrude>1</extrude>
+	<altitudeMode>relativeToGround</altitudeMode>
+	<coordinates>-44.490772,-19.441534,15</coordinates>
+	</Point>
+</Placemark>
+</Folder>
+</Document>
+</kml>
