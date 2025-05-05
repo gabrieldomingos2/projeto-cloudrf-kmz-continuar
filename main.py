@@ -32,10 +32,6 @@ def extrair_latlonbox(kml_path):
         "west": float(box.find("kml:west", ns).text),
     }
 
-def extrair_altura_kml_descricao(description_text):
-    match = re.search(r'Tx Height<\/td><td>(\d+)m<\/td>', description_text)
-    return int(match.group(1)) if match else None
-
 @app.post("/processar")
 async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
     os.makedirs("arquivos", exist_ok=True)
@@ -70,20 +66,12 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
     for placemark in root.findall(".//kml:Placemark", ns):
         nome = placemark.find("kml:name", ns)
         ponto = placemark.find(".//kml:Point/kml:coordinates", ns)
-        descricao = placemark.find("kml:description", ns)
-
         if nome is not None and ponto is not None:
             nome_texto = nome.text.lower()
             lon, lat = map(float, ponto.text.strip().split(",")[:2])
 
             if any(x in nome_texto for x in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
-                altura = 10
-                if descricao is not None:
-                    altura_desc = extrair_altura_kml_descricao(descricao.text)
-                    if altura_desc:
-                        altura = altura_desc
-                antena = {"nome": nome.text, "lat": lat, "lon": lon, "altura": altura}
-
+                antena = {"nome": nome.text, "lat": lat, "lon": lon, "altura": 10}
             elif "pivô" in nome_texto:
                 pivos.append({"nome": nome.text, "lat": lat, "lon": lon})
 
@@ -104,72 +92,43 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         return JSONResponse(status_code=400, content={"erro": "Antena principal não encontrada"})
 
     payload = {
-    "version": "CloudRF-API-v3.23",
-    "site": antena["nome"],
-    "network": "My Network",
-    "engine": 2,
-    "coordinates": 1,
-    "transmitter": {
-        "lat": antena["lat"],
-        "lon": antena["lon"],
-        "alt": 10,
-        "frq": 915,
-        "txw": 0.3,
-        "bwi": 0.1,
-        "powerUnit": "W"
-    },
-    "receiver": {
-        "lat": 0,
-        "lon": 0,
-        "alt": 3,
-        "rxg": 3,
-        "rxs": -90
-    },
-    "feeder": {
-        "flt": 1,
-        "fll": 0,
-        "fcc": 0
-    },
-    "antenna": {
-        "mode": "template",       
-        "txg": 3,
-        "txl": 0,
-        "ant": 1,
-        "azi": 0,
-        "tlt": 0,
-        "hbw": 360,
-        "vbw": 90,
-        "fbr": 3,
-        "pol": "v"
-    },
-    "model": {
-        "pm": 1,
-        "pe": 2,
-        "ked": 4,
-        "rel": 95,
-        "rcs": 1,
-        "month": 5,
-        "hour": 17,
-        "sunspots_r12": 100
-    },
-    "environment": {
-        "elevation": 1,
-        "landcover": 1,
-        "buildings": 0,
-        "obstacles": 0,
-        "clt": "Minimal.clt"
-    },
-    "output": {
-        "units": "m",
-        "col": "IRRICONTRO.dBm",
-        "out": 2,
-        "ber": 1,
-        "mod": 7,
-        "nf": -120,
-        "res": 30,
-        "rad": 10
+        "version": "CloudRF-API-v3.23",
+        "site": antena["nome"],
+        "network": "My Network",
+        "engine": 2,
+        "coordinates": 1,
+        "transmitter": {
+            "lat": antena["lat"],
+            "lon": antena["lon"],
+            "alt": antena["altura"],
+            "frq": 915,
+            "txw": 0.3,
+            "bwi": 0.1,
+            "powerUnit": "W"
+        },
+        "receiver": {"lat": 0, "lon": 0, "alt": 3, "rxg": 3, "rxs": -90},
+        "feeder": {"flt": 1, "fll": 0, "fcc": 0},
+        "antenna": {
+            "mode": "template",
+            "txg": 3,
+            "txl": 0,
+            "ant": 1,
+            "azi": 0,
+            "tlt": 0,
+            "hbw": 360,
+            "vbw": 90,
+            "fbr": 3,
+            "pol": "v"
+        },
+        "model": {"pm": 1, "pe": 2, "ked": 4, "rel": 95, "rcs": 1, "month": 5, "hour": 17, "sunspots_r12": 100},
+        "environment": {"elevation": 1, "landcover": 1, "buildings": 0, "obstacles": 0, "clt": "Minimal.clt"},
+        "output": {"units": "m", "col": "IRRICONTRO.dBm", "out": 2, "ber": 1, "mod": 7, "nf": -120, "res": 30, "rad": 10}
     }
-}
+
+    headers = {
+        "Content-Type": "application/json",
+        "key": "35113-e181126d4af70994359d767890b3a4f2604eb0ef"
+    }
 
     async with httpx.AsyncClient() as client:
         response = await client.post("https://api.cloudrf.com/area", headers=headers, json=payload)
