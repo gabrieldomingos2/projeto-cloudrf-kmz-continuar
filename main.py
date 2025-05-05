@@ -123,8 +123,6 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         "antenna": {
             "mode": "template",
             "txg": 3,
-            "txh": antena["altura"],
-            "alt": antena["altura"],
             "txl": 0,
             "ant": 1,
             "azi": 0,
