@@ -121,7 +121,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         "receiver": {"lat": 0, "lon": 0, "alt": 3, "rxg": 3, "rxs": -90},
         "feeder": {"flt": 1, "fll": 0, "fcc": 0},
         "antenna": {
-            "mode": "template",
+            "mode": "manual",
             "txg": 3,
             "txl": 0,
             "ant": 1,
