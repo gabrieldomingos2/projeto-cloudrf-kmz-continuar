@@ -112,7 +112,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         "transmitter": {
             "lat": antena["lat"],
             "lon": antena["lon"],
-            "alt": antena["altura"],
+            "alt": 10,
             "frq": 915,
             "txw": 0.3,
             "bwi": 0.1,
