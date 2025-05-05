@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import os, zipfile, xml.etree.ElementTree as ET, httpx, re, shutil
 from PIL import Image
+import numpy as np
 
 app = FastAPI()
 
@@ -65,11 +66,16 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
     for placemark in root.findall(".//kml:Placemark", ns):
         nome = placemark.find("kml:name", ns)
         ponto = placemark.find(".//kml:Point/kml:coordinates", ns)
+
         if nome is not None and ponto is not None:
             nome_texto = nome.text.lower()
             lon, lat = map(float, ponto.text.strip().split(",")[:2])
+
+            match_altura_nome = re.search(r'(\d+)\s*m', nome.text)
+            altura = int(match_altura_nome.group(1)) if match_altura_nome else 10
+
             if any(x in nome_texto for x in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
-                antena = {"nome": nome.text, "lat": lat, "lon": lon, "altura": 10}
+                antena = {"nome": nome.text, "lat": lat, "lon": lon, "altura": altura}
             elif "pivô" in nome_texto:
                 pivos.append({"nome": nome.text, "lat": lat, "lon": lon})
 
@@ -98,7 +104,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         "transmitter": {
             "lat": antena["lat"],
             "lon": antena["lon"],
-            "alt": antena["altura"],  # ✅ SOMENTE AQUI
+            "alt": antena["altura"],
             "frq": 915,
             "txw": 0.3,
             "bwi": 0.1,
@@ -107,7 +113,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         "receiver": {"lat": 0, "lon": 0, "alt": 3, "rxg": 3, "rxs": -90},
         "feeder": {"flt": 1, "fll": 0, "fcc": 0},
         "antenna": {
-            "mode": "template",  # ✅ template = ignora alt/txh
+            "mode": "template",
             "txg": 3,
             "txl": 0,
             "ant": 1,
@@ -118,18 +124,9 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
             "fbr": 3,
             "pol": "v"
         },
-        "model": {
-            "pm": 1, "pe": 2, "ked": 4, "rel": 95,
-            "rcs": 1, "month": 5, "hour": 17, "sunspots_r12": 100
-        },
-        "environment": {
-            "elevation": 1, "landcover": 1, "buildings": 0,
-            "obstacles": 0, "clt": "Minimal.clt"
-        },
-        "output": {
-            "units": "m", "col": "IRRICONTRO.dBm", "out": 2,
-            "ber": 1, "mod": 7, "nf": -120, "res": 30, "rad": 10
-        }
+        "model": {"pm": 1, "pe": 2, "ked": 4, "rel": 95, "rcs": 1, "month": 5, "hour": 17, "sunspots_r12": 100},
+        "environment": {"elevation": 1, "landcover": 1, "buildings": 0, "obstacles": 0, "clt": "Minimal.clt"},
+        "output": {"units": "m", "col": "IRRICONTRO.dBm", "out": 2, "ber": 1, "mod": 7, "nf": -120, "res": 30, "rad": 10}
     }
 
     headers = {
