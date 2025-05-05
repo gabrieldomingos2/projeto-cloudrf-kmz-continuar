@@ -136,7 +136,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         "txh": antena["altura"],      # ✅ Altura refletida aqui
         "alt": antena["altura"],      # ✅ E aqui também
         "txl": 0,
-        "ant": 1,
+        "ant": 0,
         "azi": 0,
         "tlt": 0,
         "hbw": 360,
