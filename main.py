@@ -134,7 +134,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         "mode": "manual",              # ✅ tem que ser manual
         "txg": 3,
         "txh": 10,       # ✅ ESSENCIAL para aparecer no KML
-        "alt": 10,       # ✅ reforçando
+        "alt": 0,       # ✅ reforçando
         "txl": 0,
         "ant": 1,
         "azi": 0,
