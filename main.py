@@ -112,19 +112,29 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
     "transmitter": {
         "lat": antena["lat"],
         "lon": antena["lon"],
-        "alt": antena["altura"],  # ✅ Altura da torre aqui
+        "alt": antena["altura"],  # ✅ altura principal aqui
         "frq": 915,
         "txw": 0.3,
         "bwi": 0.1,
         "powerUnit": "W"
     },
-    "receiver": {"lat": 0, "lon": 0, "alt": 3, "rxg": 3, "rxs": -90},
-    "feeder": {"flt": 1, "fll": 0, "fcc": 0},
+    "receiver": {
+        "lat": 0,
+        "lon": 0,
+        "alt": 3,
+        "rxg": 3,
+        "rxs": -90
+    },
+    "feeder": {
+        "flt": 1,
+        "fll": 0,
+        "fcc": 0
+    },
     "antenna": {
-        "mode": "manual",           # ✅ Manual para aceitar altura customizada
+        "mode": "manual",              # ✅ tem que ser manual
         "txg": 3,
-        "txh": antena["altura"],    # ✅ Altura da antena aqui
-        "alt": antena["altura"],    # ✅ E aqui também
+        "txh": antena["altura"],       # ✅ ESSENCIAL para aparecer no KML
+        "alt": antena["altura"],       # ✅ reforçando
         "txl": 0,
         "ant": 1,
         "azi": 0,
@@ -134,15 +144,34 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         "fbr": 3,
         "pol": "v"
     },
-    "model": {"pm": 1, "pe": 2, "ked": 4, "rel": 95, "rcs": 1, "month": 5, "hour": 17, "sunspots_r12": 100},
-    "environment": {"elevation": 1, "landcover": 1, "buildings": 0, "obstacles": 0, "clt": "Minimal.clt"},
-    "output": {"units": "m", "col": "IRRICONTRO.dBm", "out": 2, "ber": 1, "mod": 7, "nf": -120, "res": 30, "rad": 10}
-}
-
-    headers = {
-        "Content-Type": "application/json",
-        "key": "35113-e181126d4af70994359d767890b3a4f2604eb0ef"
+    "model": {
+        "pm": 1,
+        "pe": 2,
+        "ked": 4,
+        "rel": 95,
+        "rcs": 1,
+        "month": 5,
+        "hour": 17,
+        "sunspots_r12": 100
+    },
+    "environment": {
+        "elevation": 1,
+        "landcover": 1,
+        "buildings": 0,
+        "obstacles": 0,
+        "clt": "Minimal.clt"
+    },
+    "output": {
+        "units": "m",
+        "col": "IRRICONTRO.dBm",
+        "out": 2,
+        "ber": 1,
+        "mod": 7,
+        "nf": -120,
+        "res": 30,
+        "rad": 10
     }
+}
 
     async with httpx.AsyncClient() as client:
         response = await client.post("https://api.cloudrf.com/area", headers=headers, json=payload)
