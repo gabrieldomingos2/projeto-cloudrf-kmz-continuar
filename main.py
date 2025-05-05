@@ -1,104 +1,121 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
-import os, zipfile, base64, httpx, re
+from fastapi.staticfiles import StaticFiles
+import os, zipfile, xml.etree.ElementTree as ET, httpx
 from PIL import Image
 import numpy as np
-import xml.etree.ElementTree as ET
+import re
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"https:\/\/.*\.netlify\.app",
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.mount("/imagens", StaticFiles(directory="static/imagens"), name="imagens")
 
-# === KMZ → KML ===
-def extrair_kml(kmz_file: UploadFile):
-    caminho_kmz = f"arquivos/{kmz_file.filename}"
-    with open(caminho_kmz, "wb") as f:
-        f.write(kmz_file.file.read())
-    with zipfile.ZipFile(caminho_kmz, "r") as zip_ref:
+def extrair_latlonbox(kml_path):
+    ns = {"kml": "http://earth.google.com/kml/2.2"}
+    tree = ET.parse(kml_path)
+    root = tree.getroot()
+    box = root.find(".//kml:LatLonBox", ns)
+    if box is None:
+        return None
+    return {
+        "north": float(box.find("kml:north", ns).text),
+        "south": float(box.find("kml:south", ns).text),
+        "east": float(box.find("kml:east", ns).text),
+        "west": float(box.find("kml:west", ns).text),
+    }
+
+def extrair_altura_do_nome(nome):
+    match = re.search(r"(\d+)\s*m", nome.lower())
+    if match:
+        return int(match.group(1))
+    return 15
+
+@app.post("/processar")
+async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
+    os.makedirs("arquivos", exist_ok=True)
+    os.makedirs("static/imagens", exist_ok=True)
+
+    kmz_path = f"arquivos/{kmz.filename}"
+    with open(kmz_path, "wb") as f:
+        f.write(await kmz.read())
+
+    with zipfile.ZipFile(kmz_path, 'r') as zip_ref:
         zip_ref.extractall("arquivos/kmzextraido")
-    for root, _, files in os.walk("arquivos/kmzextraido"):
+
+    kml_path = None
+    for root, dirs, files in os.walk("arquivos/kmzextraido"):
         for file in files:
             if file.endswith(".kml"):
-                return os.path.join(root, file)
-    return None
+                kml_path = os.path.join(root, file)
+                break
 
-# === Parse do KML ===
-def parse_kml(kml_path):
+    if not kml_path:
+        return JSONResponse(status_code=400, content={"erro": "KML não encontrado"})
+
     ns = {"kml": "http://www.opengis.net/kml/2.2"}
     tree = ET.parse(kml_path)
     root = tree.getroot()
-    placemarks = root.findall(".//kml:Placemark", ns)
 
     antena = None
     pivos = []
+    circulos = []
 
-    for placemark in placemarks:
-        nome_elem = placemark.find("kml:name", ns)
-        nome = nome_elem.text if nome_elem is not None else ""
-        coords_elem = placemark.find(".//kml:Point/kml:coordinates", ns)
-        if coords_elem is not None:
-            coords = coords_elem.text.strip().split(",")
+    for placemark in root.findall(".//kml:Placemark", ns):
+        nome = placemark.find("kml:name", ns)
+        ponto = placemark.find(".//kml:Point/kml:coordinates", ns)
+        if nome is not None and ponto is not None:
+            nome_texto = nome.text.lower()
+            coords = ponto.text.strip().split(",")
             lon, lat = float(coords[0]), float(coords[1])
-            if any(p in nome.lower() for p in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
-                match = re.search(r"(\d+)\s?m", nome.lower())
-                altura = float(match.group(1)) if match else 10.0
-                antena = {
-                    "nome": nome,
-                    "latitude": lat,
-                    "longitude": lon,
-                    "altura": altura
-                }
-            elif "pivô" in nome.lower():
-                pivos.append({
-                    "nome": nome,
-                    "latitude": lat,
-                    "longitude": lon
-                })
-    return antena, pivos
 
-# === Simulação CloudRF ===
-async def simular_cloudrf(antena):
-    url = "https://api.cloudrf.com/area"
-    headers = {
-        "key": "35113-e181126d4af70994359d767890b3a4f2604eb0ef",
-        "Content-Type": "application/json"
-    }
-    body = {
+            if any(x in nome_texto for x in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
+                altura = extrair_altura_do_nome(nome.text)
+                antena = {"nome": nome.text, "lat": lat, "lon": lon, "altura": altura}
+            elif "pivô" in nome_texto:
+                pivos.append({"nome": nome.text, "lat": lat, "lon": lon})
+
+        linha = placemark.find(".//kml:LineString/kml:coordinates", ns)
+        if linha is not None and nome is not None and "medida do círculo" in nome.text.lower():
+            coordenadas = []
+            for coord in linha.text.strip().split():
+                partes = coord.split(",")
+                if len(partes) >= 2:
+                    try:
+                        lon, lat = float(partes[0]), float(partes[1])
+                        coordenadas.append([lat, lon])
+                    except:
+                        continue
+            circulos.append({"nome": nome.text, "coordenadas": coordenadas})
+
+    if not antena:
+        return JSONResponse(status_code=400, content={"erro": "Antena principal não encontrada"})
+
+    payload = {
         "version": "CloudRF-API-v3.23",
-        "site": "Brazil_V6",
+        "site": antena["nome"],
         "network": "My Network",
         "engine": 2,
         "coordinates": 1,
         "transmitter": {
-            "lat": antena["latitude"],
-            "lon": antena["longitude"],
+            "lat": antena["lat"],
+            "lon": antena["lon"],
             "alt": antena["altura"],
             "frq": 915,
             "txw": 0.3,
             "bwi": 0.1,
             "powerUnit": "W"
         },
-        "receiver": {
-            "lat": 0,
-            "lon": 0,
-            "alt": 3,
-            "rxg": 3,
-            "rxs": -90
-        },
-        "feeder": {
-            "flt": 1,
-            "fll": 0,
-            "fcc": 0
-        },
+        "receiver": {"lat": 0, "lon": 0, "alt": 3, "rxg": 3, "rxs": -90},
+        "feeder": {"flt": 1, "fll": 0, "fcc": 0},
         "antenna": {
             "mode": "template",
             "txg": 3,
@@ -111,89 +128,85 @@ async def simular_cloudrf(antena):
             "fbr": 3,
             "pol": "v"
         },
-        "model": {
-            "pm": 1,
-            "pe": 2,
-            "ked": 4,
-            "rel": 95,
-            "rcs": 1,
-            "month": 5,
-            "hour": 17,
-            "sunspots_r12": 100
-        },
-        "environment": {
-            "elevation": 1,
-            "landcover": 1,
-            "buildings": 0,
-            "obstacles": 0,
-            "clt": "Minimal.clt"
-        },
-        "output": {
-            "units": "m",
-            "col": "IRRICONTRO.dBm",
-            "out": 2,
-            "ber": 1,
-            "mod": 7,
-            "nf": -120,
-            "res": 30,
-            "rad": 10
-        }
+        "model": {"pm": 1, "pe": 2, "ked": 4, "rel": 95, "rcs": 1, "month": 5, "hour": 17, "sunspots_r12": 100},
+        "environment": {"elevation": 1, "landcover": 1, "buildings": 0, "obstacles": 0, "clt": "Minimal.clt"},
+        "output": {"units": "m", "col": "IRRICONTRO.dBm", "out": 2, "ber": 1, "mod": 7, "nf": -120, "res": 30, "rad": 10}
     }
+
+    headers = {
+        "Content-Type": "application/json",
+        "key": "35113-e181126d4af70994359d767890b3a4f2604eb0ef"
+    }
+
     async with httpx.AsyncClient() as client:
-        resp = await client.post(url, headers=headers, json=body)
-        if resp.status_code != 200:
-            raise Exception("Erro na API CloudRF", resp.text)
-        result = resp.json()
-        img_data = base64.b64decode(result["image"])
+        response = await client.post("https://api.cloudrf.com/area", headers=headers, json=payload)
+
+        if response.status_code != 200:
+            return JSONResponse(status_code=500, content={"erro": "Erro na API CloudRF", "detalhe": response.text})
+
+        dados = response.json()
+        imagem_url = dados["PNG_WGS84"]
+        kmz_url = dados.get("kmz")
+
+        img_resp = await client.get(imagem_url)
         with open("static/imagens/sinal.png", "wb") as f:
-            f.write(img_data)
-        return {"bbox": result["latlonbox"]}
+            f.write(img_resp.content)
 
-# === Pixelização ===
-def latlon_para_pixel(lat, lon, bbox, largura, altura):
-    x = int((lon - bbox["west"]) / (bbox["east"] - bbox["west"]) * largura)
-    y = int((bbox["north"] - lat) / (bbox["north"] - bbox["south"]) * altura)
-    return x, y
+        imagem = Image.open("static/imagens/sinal.png").convert("RGB")
+        largura, altura = imagem.size
 
-# === Análise cobertura ===
-def verificar_cobertura(pivos, bbox):
-    imagem = Image.open("static/imagens/sinal.png").convert("RGB")
-    largura, altura = imagem.size
-    img_array = np.array(imagem)
-    fora = []
-    for pivo in pivos:
-        x, y = latlon_para_pixel(pivo["latitude"], pivo["longitude"], bbox, largura, altura)
+        if kmz_url:
+            kmz_resp = await client.get(kmz_url)
+            with open("static/imagens/sinal.kmz", "wb") as f:
+                f.write(kmz_resp.content)
+            with zipfile.ZipFile("static/imagens/sinal.kmz", "r") as zip_ref:
+                zip_ref.extractall("static/imagens/kml")
+
+        limites = None
+        for root_dir, _, files in os.walk("static/imagens/kml"):
+            for file in files:
+                if file.endswith(".kml"):
+                    limites = extrair_latlonbox(os.path.join(root_dir, file))
+                    break
+            if limites:
+                break
+
+    def coordenada_para_pixel(lat, lon):
+        lat_n, lon_e, lat_s, lon_w = limites["north"], limites["east"], limites["south"], limites["west"]
+        px = int((lon - lon_w) / (lon_e - lon_w) * largura)
+        py = int((lat_n - lat) / (lat_n - lat_s) * altura)
+        return max(0, min(px, largura - 1)), max(0, min(py, altura - 1))
+
+    def esta_fora(px, py):
+        entorno = 3
+        for dx in range(-entorno, entorno + 1):
+            for dy in range(-entorno, entorno + 1):
+                nx, ny = px + dx, py + dy
+                if 0 <= nx < largura and 0 <= ny < altura:
+                    r, g, b = imagem.getpixel((nx, ny))
+                    if g > r and g > b and g > 100:
+                        return False
+        return True
+
+    for piv in pivos:
+        x, y = coordenada_para_pixel(piv["lat"], piv["lon"])
         if 0 <= x < largura and 0 <= y < altura:
-            cor = img_array[y, x]
-            if cor[0] > 200 and cor[1] > 200:  # branco/cinza
-                fora.append(pivo)
-        else:
-            fora.append(pivo)
-    return fora
+            imagem.putpixel((x, y), (0, 0, 255))
 
-# === Etapa 1 ===
-@app.post("/processar_kmz")
-async def processar_kmz(kmz: UploadFile = File(...)):
-    try:
-        kml_path = extrair_kml(kmz)
-        antena, pivos = parse_kml(kml_path)
-        if not antena:
-            return JSONResponse(content={"erro": "Antena não encontrada"}, status_code=400)
-        return {"antena": antena, "pivos": pivos}
-    except Exception as e:
-        return JSONResponse(content={"erro": "Falha no processamento", "detalhe": str(e)}, status_code=500)
+    imagem.save("static/imagens/sinal.png")
 
-# === Etapa 2 ===
-@app.post("/simular_cloudrf")
-async def simular(antena: dict, pivos: list):
-    try:
-        resultado = await simular_cloudrf(antena)
-        bbox = resultado["bbox"]
-        pivos_fora = verificar_cobertura(pivos, bbox)
-        return {
-            "imagem": "/imagens/sinal.png",
-            "limites": bbox,
-            "fora_da_cobertura": pivos_fora
-        }
-    except Exception as e:
-        return JSONResponse(content={"erro": "Falha na simulação", "detalhe": str(e)}, status_code=500)
+    pivos_fora = []
+    for piv in pivos:
+        x, y = coordenada_para_pixel(piv["lat"], piv["lon"])
+        if esta_fora(x, y):
+            pivos_fora.append(piv)
+
+    url_base = str(request.base_url).rstrip("/")
+    return {
+        "imagem": f"{url_base}/imagens/sinal.png",
+        "limites": limites,
+        "antena": antena,
+        "pivos": pivos,
+        "fora_cobertura": pivos_fora,
+        "circulos": circulos
+    }
