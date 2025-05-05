@@ -17,8 +17,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Servir imagens geradas
+# Pasta estática para servir a imagem gerada
 app.mount("/imagens", StaticFiles(directory="static/imagens"), name="imagens")
+
 
 def extrair_latlonbox(kml_path):
     ns = {"kml": "http://earth.google.com/kml/2.2"}
@@ -34,16 +35,16 @@ def extrair_latlonbox(kml_path):
         "west": float(box.find("kml:west", ns).text),
     }
 
+
 def extrair_altura_do_nome(nome):
     match = re.search(r"(\d+)\s*m", nome.lower())
-    return int(match.group(1)) if match else 15
+    return int(match.group(1)) if match else 15  # default 15m
+
 
 @app.post("/processar")
 async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
     os.makedirs("arquivos", exist_ok=True)
     os.makedirs("static/imagens", exist_ok=True)
-
-    # Limpar diretórios antigos
     shutil.rmtree("arquivos/kmzextraido", ignore_errors=True)
     shutil.rmtree("static/imagens/kml", ignore_errors=True)
 
@@ -120,6 +121,8 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         "antenna": {
             "mode": "template",
             "txg": 3,
+            "txh": antena["altura"],
+            "alt": antena["altura"],
             "txl": 0,
             "ant": 1,
             "azi": 0,
@@ -136,7 +139,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
 
     headers = {
         "Content-Type": "application/json",
-        "key": "35113-e181126d4af70994359d767890b3a4f2604eb0ef"
+        "key": "35113-e181126d4af70994359d767890b3a4f2604eb0ef"  # ⚠️ Mova isso para variável de ambiente em produção!
     }
 
     async with httpx.AsyncClient() as client:
