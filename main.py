@@ -8,7 +8,6 @@ import numpy as np
 
 app = FastAPI()
 
-# CORS liberado para Netlify
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"https:\/\/.*\.netlify\.app",
@@ -17,9 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Pasta estática para servir a imagem gerada
 app.mount("/imagens", StaticFiles(directory="static/imagens"), name="imagens")
-
 
 def extrair_latlonbox(kml_path):
     ns = {"kml": "http://earth.google.com/kml/2.2"}
@@ -35,11 +32,9 @@ def extrair_latlonbox(kml_path):
         "west": float(box.find("kml:west", ns).text),
     }
 
-
 def extrair_altura_do_nome(nome):
     match = re.search(r"(\d+)\s*m", nome.lower())
     return int(match.group(1)) if match else 15  # default 15m
-
 
 @app.post("/processar")
 async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
@@ -82,6 +77,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
             if any(x in nome_texto for x in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
                 altura = extrair_altura_do_nome(nome.text)
                 antena = {"nome": nome.text, "lat": lat, "lon": lon, "altura": altura}
+                print(f"📡 Antena detectada: {nome.text} | Altura extraída: {altura}m")
             elif "pivô" in nome_texto:
                 pivos.append({"nome": nome.text, "lat": lat, "lon": lon})
 
@@ -137,9 +133,11 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         "output": {"units": "m", "col": "IRRICONTRO.dBm", "out": 2, "ber": 1, "mod": 7, "nf": -120, "res": 30, "rad": 10}
     }
 
+    print(f"🚀 Enviando para CloudRF | ALT: {payload['transmitter']['alt']} | txh: {payload['antenna']['txh']} | ant.alt: {payload['antenna']['alt']}")
+
     headers = {
         "Content-Type": "application/json",
-        "key": "35113-e181126d4af70994359d767890b3a4f2604eb0ef"  # ⚠️ Mova isso para variável de ambiente em produção!
+        "key": "35113-e181126d4af70994359d767890b3a4f2604eb0ef"
     }
 
     async with httpx.AsyncClient() as client:
