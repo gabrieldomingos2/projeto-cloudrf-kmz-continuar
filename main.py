@@ -112,7 +112,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
     "transmitter": {
         "lat": antena["lat"],
         "lon": antena["lon"],
-        "alt": antena["altura"],  # ✅ altura principal aqui
+        "alt": 10,  # ✅ altura principal aqui
         "frq": 915,
         "txw": 0.3,
         "bwi": 0.1,
@@ -133,8 +133,8 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
     "antenna": {
         "mode": "manual",              # ✅ tem que ser manual
         "txg": 3,
-        "txh": antena["altura"],       # ✅ ESSENCIAL para aparecer no KML
-        "alt": antena["altura"],       # ✅ reforçando
+        "txh": 10,       # ✅ ESSENCIAL para aparecer no KML
+        "alt": 10,       # ✅ reforçando
         "txl": 0,
         "ant": 1,
         "azi": 0,
