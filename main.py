@@ -77,7 +77,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
             lon, lat = map(float, ponto.text.strip().split(",")[:2])
 
             if any(x in nome_texto for x in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
-                altura = 15
+                altura = 10
                 if descricao is not None:
                     altura_desc = extrair_altura_kml_descricao(descricao.text)
                     if altura_desc:
