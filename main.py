@@ -2,13 +2,13 @@ from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-import os, zipfile, xml.etree.ElementTree as ET, httpx
+import os, zipfile, xml.etree.ElementTree as ET, httpx, re, shutil
 from PIL import Image
 import numpy as np
-import re
 
 app = FastAPI()
 
+# CORS liberado para Netlify
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"https:\/\/.*\.netlify\.app",
@@ -17,6 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Servir imagens geradas
 app.mount("/imagens", StaticFiles(directory="static/imagens"), name="imagens")
 
 def extrair_latlonbox(kml_path):
@@ -35,14 +36,16 @@ def extrair_latlonbox(kml_path):
 
 def extrair_altura_do_nome(nome):
     match = re.search(r"(\d+)\s*m", nome.lower())
-    if match:
-        return int(match.group(1))
-    return 15
+    return int(match.group(1)) if match else 15
 
 @app.post("/processar")
 async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
     os.makedirs("arquivos", exist_ok=True)
     os.makedirs("static/imagens", exist_ok=True)
+
+    # Limpar diretórios antigos
+    shutil.rmtree("arquivos/kmzextraido", ignore_errors=True)
+    shutil.rmtree("static/imagens/kml", ignore_errors=True)
 
     kmz_path = f"arquivos/{kmz.filename}"
     with open(kmz_path, "wb") as f:
@@ -52,12 +55,11 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         zip_ref.extractall("arquivos/kmzextraido")
 
     kml_path = None
-    for root, dirs, files in os.walk("arquivos/kmzextraido"):
+    for root_dir, _, files in os.walk("arquivos/kmzextraido"):
         for file in files:
             if file.endswith(".kml"):
-                kml_path = os.path.join(root, file)
+                kml_path = os.path.join(root_dir, file)
                 break
-
     if not kml_path:
         return JSONResponse(status_code=400, content={"erro": "KML não encontrado"})
 
@@ -74,8 +76,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         ponto = placemark.find(".//kml:Point/kml:coordinates", ns)
         if nome is not None and ponto is not None:
             nome_texto = nome.text.lower()
-            coords = ponto.text.strip().split(",")
-            lon, lat = float(coords[0]), float(coords[1])
+            lon, lat = map(float, ponto.text.strip().split(",")[:2])
 
             if any(x in nome_texto for x in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
                 altura = extrair_altura_do_nome(nome.text)
@@ -140,7 +141,6 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
 
     async with httpx.AsyncClient() as client:
         response = await client.post("https://api.cloudrf.com/area", headers=headers, json=payload)
-
         if response.status_code != 200:
             return JSONResponse(status_code=500, content={"erro": "Erro na API CloudRF", "detalhe": response.text})
 
