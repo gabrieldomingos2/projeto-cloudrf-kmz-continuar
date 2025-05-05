@@ -71,7 +71,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
             nome_texto = nome.text.lower()
             lon, lat = map(float, ponto.text.strip().split(",")[:2])
 
-            match_altura_nome = re.search(r'(\d+)\s*m', nome.text)
+            match_altura_nome = re.search(r'(\d+)\s*-*\s*m', nome.text.lower())
             altura = int(match_altura_nome.group(1)) if match_altura_nome else 10
 
             if any(x in nome_texto for x in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
@@ -104,7 +104,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         "transmitter": {
             "lat": antena["lat"],
             "lon": antena["lon"],
-            "alt": 10,
+            "alt": antena["altura"],
             "frq": 915,
             "txw": 0.3,
             "bwi": 0.1,
@@ -113,9 +113,9 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         "receiver": {"lat": 0, "lon": 0, "alt": 3, "rxg": 3, "rxs": -90},
         "feeder": {"flt": 1, "fll": 0, "fcc": 0},
         "antenna": {
-            "mode": "Custom pattern",
+            "mode": "custom",
             "txg": 3,
-            "txh": 10,
+            "txh": antena["altura"],
             "txl": 0,
             "ant": 1,
             "azi": 0,
