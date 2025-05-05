@@ -32,9 +32,9 @@ def extrair_latlonbox(kml_path):
         "west": float(box.find("kml:west", ns).text),
     }
 
-def extrair_altura_do_nome(nome):
-    match = re.search(r"(\d+)\s*m", nome.lower())
-    return int(match.group(1)) if match else 15  # default 15m
+def extrair_altura_kml_descricao(description_text):
+    match = re.search(r'Tx Height<\/td><td>(\d+)m<\/td>', description_text)
+    return int(match.group(1)) if match else None
 
 @app.post("/processar")
 async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
@@ -70,14 +70,20 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
     for placemark in root.findall(".//kml:Placemark", ns):
         nome = placemark.find("kml:name", ns)
         ponto = placemark.find(".//kml:Point/kml:coordinates", ns)
+        descricao = placemark.find("kml:description", ns)
+
         if nome is not None and ponto is not None:
             nome_texto = nome.text.lower()
             lon, lat = map(float, ponto.text.strip().split(",")[:2])
 
             if any(x in nome_texto for x in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
-                altura = extrair_altura_do_nome(nome.text)
+                altura = 15
+                if descricao is not None:
+                    altura_desc = extrair_altura_kml_descricao(descricao.text)
+                    if altura_desc:
+                        altura = altura_desc
                 antena = {"nome": nome.text, "lat": lat, "lon": lon, "altura": altura}
-                print(f"📡 Antena detectada: {nome.text} | Altura extraída: {altura}m")
+
             elif "pivô" in nome_texto:
                 pivos.append({"nome": nome.text, "lat": lat, "lon": lon})
 
@@ -133,8 +139,6 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         "output": {"units": "m", "col": "IRRICONTRO.dBm", "out": 2, "ber": 1, "mod": 7, "nf": -120, "res": 30, "rad": 10}
     }
 
-    print(f"🚀 Enviando para CloudRF | ALT: {payload['transmitter']['alt']} | txh: {payload['antenna']['txh']} | ant.alt: {payload['antenna']['alt']}")
-
     headers = {
         "Content-Type": "application/json",
         "key": "35113-e181126d4af70994359d767890b3a4f2604eb0ef"
@@ -179,15 +183,8 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         return max(0, min(px, largura - 1)), max(0, min(py, altura - 1))
 
     def esta_fora(px, py):
-        entorno = 3
-        for dx in range(-entorno, entorno + 1):
-            for dy in range(-entorno, entorno + 1):
-                nx, ny = px + dx, py + dy
-                if 0 <= nx < largura and 0 <= ny < altura:
-                    r, g, b = imagem.getpixel((nx, ny))
-                    if g > r and g > b and g > 100:
-                        return False
-        return True
+        r, g, b = imagem.getpixel((px, py))
+        return not (g > r and g > b and g > 100)
 
     for piv in pivos:
         x, y = coordenada_para_pixel(piv["lat"], piv["lon"])
