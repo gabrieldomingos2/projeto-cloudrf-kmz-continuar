@@ -66,13 +66,23 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
     for placemark in root.findall(".//kml:Placemark", ns):
         nome = placemark.find("kml:name", ns)
         ponto = placemark.find(".//kml:Point/kml:coordinates", ns)
+        lookat_altitude = placemark.find(".//kml:LookAt/kml:altitude", ns)
 
         if nome is not None and ponto is not None:
             nome_texto = nome.text.lower()
             lon, lat = map(float, ponto.text.strip().split(",")[:2])
 
+            # Detectar altura via nome ou LookAt/altitude
             match_altura_nome = re.search(r'(\d+)\s*-*\s*m', nome.text.lower())
-            altura = int(match_altura_nome.group(1)) if match_altura_nome else 10
+            if match_altura_nome:
+                altura = int(match_altura_nome.group(1))
+            elif lookat_altitude is not None:
+                try:
+                    altura = float(lookat_altitude.text)
+                except:
+                    altura = 10
+            else:
+                altura = 10
 
             if any(x in nome_texto for x in ["antena", "repetidora", "torre", "barracão", "galpão", "silo"]):
                 antena = {"nome": nome.text, "lat": lat, "lon": lon, "altura": altura}
