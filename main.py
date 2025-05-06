@@ -105,7 +105,8 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         if not antena:
         return JSONResponse(status_code=400, content={"erro": "Antena principal não encontrada"})
 
-    print("📡 Enviando altura:", antena["altura"])  # Debug para conferir a altura
+        print("📡 Enviando altura:", antena["altura"])  # <- fora do if, certo agora
+
 
     payload = {
         "version": "CloudRF-API-v3.23",
