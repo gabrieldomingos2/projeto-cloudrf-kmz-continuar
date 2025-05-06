@@ -72,7 +72,6 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
             nome_texto = nome.text.lower()
             lon, lat = map(float, ponto.text.strip().split(",")[:2])
 
-            # Detectar altura via nome ou LookAt/altitude
             match_altura_nome = re.search(r'(\d+)\s*-*\s*m', nome.text.lower())
             if match_altura_nome:
                 altura = int(match_altura_nome.group(1))
@@ -102,11 +101,10 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
                         continue
             circulos.append({"nome": nome.text, "coordenadas": coordenadas})
 
-        if not antena:
+    if not antena:
         return JSONResponse(status_code=400, content={"erro": "Antena principal não encontrada"})
 
-        print("📡 Enviando altura:", antena["altura"])  # <- fora do if, certo agora
-
+    print("📡 Enviando altura:", antena["altura"])
 
     payload = {
         "version": "CloudRF-API-v3.23",
@@ -126,7 +124,7 @@ async def processar_kmz(request: Request, kmz: UploadFile = File(...)):
         "receiver": {"lat": 0, "lon": 0, "alt": 3, "rxg": 3, "rxs": -90},
         "feeder": {"flt": 1, "fll": 0, "fcc": 0},
         "antenna": {
-            "mode": "custom",  # 🚀 Corrigido aqui!
+            "mode": "custom",
             "txg": 3,
             "txh": antena["altura"],
             "txl": 0,
